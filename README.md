@@ -7,8 +7,22 @@ python3 parse_fio_score.py --write seqwrite.json --read seqread.json
 
 Note: seqwrite.json and seqread.json are the output files from the fio run jobs.
 
+Example fio Launch Commands
 
-Sample output shown below:
+Write:
+
+fio --client=hosts.txt /mnt/weka/seqwrite.fio \
+    --output=seqwrite.json \
+    --output-format=json+
+
+Read:
+
+fio --client=hosts.txt /mnt/weka/seqread.fio \
+    --output=seqread.json \
+    --output-format=json+
+
+
+Sample output of parse_fio_score.py shown below:
 
 WRITE RESULT
 ----------------------------------------------------------------------
@@ -84,3 +98,25 @@ Note: You can run the same parser to calculate scaling efficiency if you also ha
 
 
 python3 parse_fio_score.py--write seqwrite.json --read seqread.json --single-write single-seqwrite.json --single-read single-seqread.json
+
+
+SCALING EFFICIENCY
+----------------------------------------------------------------------
+Single-client write:       17.01 GB/s
+
+Single-client read:        42.92 GB/s
+
+Single-client score:       59.93 GB/s
+
+Multi-client score:        233.95 GB/s
+
+Participating clients:     4
+
+Scaling factor:            3.90x
+
+Scaling efficiency:        97.60%
+
+Formula:
+
+Scaling Efficiency = Multi-Client Score / (Single-Client Score × Client Count)
+
