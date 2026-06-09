@@ -1,122 +1,369 @@
-# isc26-fio-parser
-Python script to parse fio storage challenge for ISC26 and calculate final score 
- 
-Execute as follows after running your fio write and read jobs:
+# ISC26 Storage Challenge FIO Parser
 
-python3 parse_fio_score.py --write seqwrite.json --read seqread.json
+This repository contains reference fio job files and a scoring parser for the ISC26 Student Cluster Competition Storage Challenge.
 
-Note: seqwrite.json and seqread.json are the output files from the fio run jobs.
+The parser extracts throughput, IOPS, latency, total I/O, and final score from fio JSON output files generated during the competition.
 
-Example fio Launch Commands
+---
 
-Write:
+# Repository Contents
 
+```text
+.
+├── parse_fio_score.py
+├── seqwrite.fio
+├── seqread.fio
+└── README.md
+```
+
+---
+
+# Storage Challenge Overview
+
+The ISC26 Storage Challenge measures the performance of a shared storage system using industry-standard fio workloads.
+
+Teams execute:
+
+1. Sequential Write Benchmark
+2. Sequential Read Benchmark
+
+The final score is calculated using aggregate throughput across all participating clients.
+
+```text
+Final Score =
+Aggregate Sequential Write Throughput +
+Aggregate Sequential Read Throughput
+```
+
+Higher scores are better.
+
+---
+
+# FIO Requirements
+
+Required fio settings:
+
+```ini
+ioengine=libaio
+direct=1
+```
+
+The challenge assumes:
+
+* Shared storage filesystem
+* Multiple client nodes
+* Persistent NVMe-backed storage
+* POSIX-compatible filesystem
+
+Examples:
+
+* WEKA
+* Lustre
+* BeeGFS
+* NFS
+* SMB
+* GPFS / IBM Storage Scale
+
+---
+
+# Example hosts.txt
+
+One client address per line:
+
+```text
+172.31.18.70
+172.31.18.71
+172.31.18.72
+172.31.18.73
+```
+
+Do not place host aliases or multiple fields on each line.
+
+Correct:
+
+```text
+172.31.18.70
+172.31.18.71
+```
+
+Incorrect:
+
+```text
+172.31.18.70 weka70
+172.31.18.71 weka71
+```
+
+---
+
+# Starting fio Servers
+
+Start a fio server on each client node:
+
+```bash
+fio --server --daemonize=/tmp/fio-server.log
+```
+
+Verify:
+
+```bash
+ps -ef | grep fio
+```
+
+---
+
+# Sequential Write Benchmark
+
+Reference job file:
+
+## seqwrite.fio
+
+```ini
+[global]
+directory=/mnt/weka
+filename_format=fiofile.$jobnum
+unique_filename=1
+
+name=seqtest
+rw=write
+
+size=50G
+bs=1M
+
+numjobs=4
+iodepth=32
+
+runtime=90
+ramp_time=15
+time_based=1
+
+group_reporting=1
+
+ioengine=libaio
+direct=1
+
+refill_buffers=1
+
+[seqtest]
+```
+
+Run:
+
+```bash
 fio --client=hosts.txt /mnt/weka/seqwrite.fio \
-    --output=seqwrite.json \
-    --output-format=json+
+  --output=seqwrite.json \
+  --output-format=json+
+```
 
-Read:
+---
 
+# Sequential Read Benchmark
+
+Reference job file:
+
+## seqread.fio
+
+```ini
+[global]
+directory=/mnt/weka
+filename_format=fiofile.$jobnum
+unique_filename=1
+
+name=seqtest
+rw=read
+
+size=50G
+bs=1M
+
+numjobs=4
+iodepth=32
+
+runtime=90
+ramp_time=15
+time_based=1
+
+group_reporting=1
+
+ioengine=libaio
+direct=1
+
+[seqtest]
+```
+
+Run:
+
+```bash
 fio --client=hosts.txt /mnt/weka/seqread.fio \
-    --output=seqread.json \
-    --output-format=json+
+  --output=seqread.json \
+  --output-format=json+
+```
 
+---
 
-Sample output of parse_fio_score.py shown below:
+# Official Score Calculation
 
+The parser uses aggregate throughput from the fio JSON output.
+
+For fio client/server mode, the JSON contains:
+
+```text
+client_stats[]
+```
+
+including a summary row:
+
+```text
+jobname = "All clients"
+```
+
+The parser uses this row as the authoritative aggregate result.
+
+Do not sum the "All clients" row together with individual client rows or throughput will be double-counted.
+
+Formula:
+
+```text
+Final Score =
+Aggregate Sequential Write Throughput +
+Aggregate Sequential Read Throughput
+```
+
+Example:
+
+```text
+Write = 74.55 GB/s
+Read  = 159.40 GB/s
+
+Final Score = 233.95 GB/s
+```
+
+---
+
+# Running the Parser
+
+## Multi-Client Results
+
+```bash
+python3 parse_fio_score.py \
+  --write seqwrite.json \
+  --read seqread.json
+```
+
+Example output:
+
+```text
 WRITE RESULT
 ----------------------------------------------------------------------
-Source file:              seqwrite.json
-
-fio version:              fio-3.36
-
-Aggregation source:       All clients row
-
-Participating clients:    4
-
-Bandwidth:                74.55 GB/s
-
-Bandwidth:                69.43 GiB/s
-
-IOPS:                     71089
-
-Total IO:                 6717.55 GB
-
-Runtime:                  90.11 sec
-
-Avg completion latency:   6.99 ms
-
-P50 completion latency:   5.91 ms
-
-P95 completion latency:   9.52 ms
-
-P99 completion latency:   13.38 ms
+Aggregate Write Throughput: 74.55 GB/s
 
 READ RESULT
 ----------------------------------------------------------------------
-Source file:              seqread.json
-
-fio version:              fio-3.36
-
-Aggregation source:       All clients row
-
-Participating clients:    4
-
-Bandwidth:                159.40 GB/s
-
-Bandwidth:                148.46 GiB/s
-
-IOPS:                     152013
-
-Total IO:                 14347.51 GB
-
-Runtime:                  90.01 sec
-
-Avg completion latency:   3.35 ms
-
-P50 completion latency:   3.07 ms
-
-P95 completion latency:   6.16 ms
-
-P99 completion latency:   8.19 ms
+Aggregate Read Throughput: 159.40 GB/s
 
 FINAL SCORE
 ----------------------------------------------------------------------
+Final Score: 233.95 GB/s
+```
+
+---
+
+# Optional Scaling Efficiency Analysis
+
+The parser can also compare multi-client performance against a single-client baseline.
+
+This metric is informational only and is not used for official scoring.
+
+Generate single-client results:
+
+```bash
+fio /mnt/weka/seqwrite.fio \
+  --output=single-seqwrite.json \
+  --output-format=json+
+
+fio /mnt/weka/seqread.fio \
+  --output=single-seqread.json \
+  --output-format=json+
+```
+
+Run parser:
+
+```bash
+python3 parse_fio_score.py \
+  --write seqwrite.json \
+  --read seqread.json \
+  --single-write single-seqwrite.json \
+  --single-read single-seqread.json
+```
+
 Formula:
 
-Final Score = Aggregate Sequential Write Throughput + Aggregate Sequential Read Throughput
+```text
+Scaling Efficiency =
+Multi-Client Score /
+(Single-Client Score × Number of Clients)
+```
 
-Aggregate Write Throughput: 74.55 GB/s
+Example:
 
-Aggregate Read Throughput:  159.40 GB/s
+```text
+Single-client score: 59.93 GB/s
+Multi-client score: 233.95 GB/s
+Clients: 4
 
-Final Score:                233.95 GB/s
+Scaling factor:     3.90x
+Scaling efficiency: 97.60%
+```
 
+---
 
+# Scaling Efficiency Ratings
 
-Note: You can run the same parser to calculate scaling efficiency if you also have singe-write and single-read json output files:
+| Efficiency | Rating    |
+| ---------- | --------- |
+| ≥95%       | Excellent |
+| 85–95%     | Very Good |
+| 70–85%     | Good      |
+| 50–70%     | Moderate  |
+| <50%       | Poor      |
 
+---
 
-python3 parse_fio_score.py--write seqwrite.json --read seqread.json --single-write single-seqwrite.json --single-read single-seqread.json
+# Validation Commands
 
+Verify storage:
 
-SCALING EFFICIENCY
-----------------------------------------------------------------------
-Single-client write:       17.01 GB/s
+```bash
+mount | grep /mnt/weka
+```
 
-Single-client read:        42.92 GB/s
+```bash
+df -h /mnt/weka
+```
 
-Single-client score:       59.93 GB/s
+Verify NVMe devices:
 
-Multi-client score:        233.95 GB/s
+```bash
+lsblk
+```
 
-Participating clients:     4
+```bash
+nvme list
+```
 
-Scaling factor:            3.90x
+Verify fio version:
 
-Scaling efficiency:        97.60%
+```bash
+fio --version
+```
 
-Formula:
+---
 
-Scaling Efficiency = Multi-Client Score / (Single-Client Score × Client Count)
+# Notes
 
+* Shared backend storage must be used.
+* Local client block devices should not be used directly for benchmark files.
+* Storage must be persistent and NVMe-backed.
+* Memory-backed filesystems are prohibited.
+* The parser automatically detects fio aggregate summary rows.
+* The parser supports both single-client and multi-client JSON output.
+
+Good luck at ISC26!
